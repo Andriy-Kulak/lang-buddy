@@ -54,7 +54,7 @@ export function FollowerController({ children, targetRef, position = [0, 0, 0], 
       group.rotation.y = currentRotation + diff * 8 * delta;
 
       // Walking bounce animation
-      group.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 15)) * 0.2;
+      group.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 15)) * 0.05;
     } else {
       // Idle
       group.position.y = THREE.MathUtils.lerp(group.position.y, 0, 0.1);

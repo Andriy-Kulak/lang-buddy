@@ -38,11 +38,30 @@ function CameraFollow({ targetRef }: { targetRef: React.RefObject<THREE.Group | 
 export default function PlaygroundPage() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [status, setStatus] = useState("connected");
+  const [activeChar, setActiveChar] = useState("humanoid");
 
   // References for follow logic
-  const playerRef = useRef<THREE.Group>(null);
+  const humanoidRef = useRef<THREE.Group>(null);
   const petRef = useRef<THREE.Group>(null);
   const botRef = useRef<THREE.Group>(null);
+
+  const getRef = (id: string) => {
+    if (id === "humanoid") return humanoidRef;
+    if (id === "pet") return petRef;
+    return botRef;
+  };
+
+  const getComponent = (id: string) => {
+    if (id === "humanoid") return <BlockyHumanoid isSpeaking={isSpeaking} status={status} />;
+    if (id === "pet") return <VoxelPet isSpeaking={isSpeaking} status={status} />;
+    return <VoxBot isSpeaking={isSpeaking} status={status} />;
+  };
+
+  const order = useMemo(() => {
+    if (activeChar === "humanoid") return ["humanoid", "pet", "bot"];
+    if (activeChar === "pet") return ["pet", "humanoid", "bot"];
+    return ["bot", "humanoid", "pet"];
+  }, [activeChar]);
 
   // Keyboard mapping
   const keyboardMap = useMemo(() => [
@@ -60,6 +79,19 @@ export default function PlaygroundPage() {
         <p className="text-sm text-slate-600 mb-4">Use WASD or Arrows to move.</p>
         
         <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Control:</span>
+            <select 
+              value={activeChar}
+              onChange={(e) => setActiveChar(e.target.value)}
+              className="bg-slate-100 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5"
+            >
+              <option value="humanoid">Blocky Humanoid</option>
+              <option value="pet">Voxel Pet</option>
+              <option value="bot">Vox-Bot</option>
+            </select>
+          </div>
+
           <label className="flex items-center gap-2 text-sm font-medium">
             <input 
               type="checkbox" 
@@ -108,21 +140,34 @@ export default function PlaygroundPage() {
           {/* World */}
           <WorldEnvironment />
 
-          {/* Characters */}
-          <PlayerController objectRef={playerRef} position={[0, 0, 0]}>
-            <BlockyHumanoid isSpeaking={isSpeaking} status={status} />
-          </PlayerController>
-
-          <FollowerController objectRef={petRef} targetRef={playerRef} followDistance={2} position={[-2, 0, -2]}>
-            <VoxelPet isSpeaking={isSpeaking} status={status} />
-          </FollowerController>
-
-          <FollowerController objectRef={botRef} targetRef={petRef} followDistance={2.5} position={[2, 0, -4]}>
-            <VoxBot isSpeaking={isSpeaking} status={status} />
-          </FollowerController>
+          {/* Characters (Dynamically Ordered) */}
+          {order.map((id, index) => {
+            const isPlayer = index === 0;
+            const targetId = index > 0 ? order[index - 1] : null;
+            
+            if (isPlayer) {
+              return (
+                <PlayerController key={`player-${id}`} objectRef={getRef(id)} position={[0, 0, 0]}>
+                  {getComponent(id)}
+                </PlayerController>
+              );
+            } else {
+              return (
+                <FollowerController 
+                  key={`follower-${id}`} 
+                  objectRef={getRef(id)} 
+                  targetRef={getRef(targetId!)} 
+                  followDistance={id === "bot" ? 2.5 : 2} 
+                  position={index === 1 ? [-2, 0, -2] : [2, 0, -4]}
+                >
+                  {getComponent(id)}
+                </FollowerController>
+              );
+            }
+          })}
 
           {/* Camera Follower */}
-          <CameraFollow targetRef={playerRef} />
+          <CameraFollow targetRef={getRef(activeChar)} />
         </Canvas>
       </KeyboardControls>
     </div>

@@ -56,7 +56,7 @@ export function PlayerController({ children, position = [0, 0, 0], objectRef }: 
       group.position.add(velocity);
 
       // Simple walking bounce animation
-      group.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 15)) * 0.2;
+      group.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 15)) * 0.05;
     } else {
       // Idle
       group.position.y = THREE.MathUtils.lerp(group.position.y, 0, 0.1);
