@@ -12,7 +12,7 @@ interface Props {
 export function VoxBot({ isSpeaking, status }: Props) {
   const groupRef = useRef<THREE.Group>(null);
   const headRef = useRef<THREE.Group>(null);
-  const mouthRef = useRef<THREE.Group>(null);
+  const jawRef = useRef<THREE.Group>(null);
 
   const [isSpinning, setIsSpinning] = useState(false);
   const [isTalkingLocal, setIsTalkingLocal] = useState(false);
@@ -43,21 +43,15 @@ export function VoxBot({ isSpeaking, status }: Props) {
     const t = state.clock.elapsedTime;
 
     if (activeSpeaking) {
-      // Bob the head slightly
-      if (headRef.current) {
-        headRef.current.position.y = 1.3 + Math.sin(t * 8) * 0.05;
-      }
-      // Move mouth grill rapidly
-      if (mouthRef.current) {
-        mouthRef.current.scale.y = 1 + Math.abs(Math.sin(t * 15)) * 0.3;
+      // Jaw opens and closes like Bender - hinges down from the top edge
+      if (jawRef.current) {
+        const jawAngle = Math.abs(Math.sin(t * 12)) * 0.35;
+        jawRef.current.rotation.x = jawAngle;
       }
     } else {
-      // Reset positions smoothly
-      if (headRef.current) {
-        headRef.current.position.y = THREE.MathUtils.lerp(headRef.current.position.y, 1.3, 0.2);
-      }
-      if (mouthRef.current) {
-        mouthRef.current.scale.y = THREE.MathUtils.lerp(mouthRef.current.scale.y, 1, 0.3);
+      // Smoothly close jaw
+      if (jawRef.current) {
+        jawRef.current.rotation.x = THREE.MathUtils.lerp(jawRef.current.rotation.x, 0, 0.2);
       }
     }
 
@@ -65,7 +59,7 @@ export function VoxBot({ isSpeaking, status }: Props) {
     if (groupRef.current) {
       if (isSpinning) {
         groupRef.current.rotation.y += 0.15;
-        groupRef.current.position.y = Math.sin(t * 10) * 0.2; // slight hop
+        groupRef.current.position.y = Math.sin(t * 10) * 0.2;
       } else {
         groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, 0, 0.05);
         groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, 0, 0.1);
@@ -199,37 +193,40 @@ export function VoxBot({ isSpeaking, status }: Props) {
           <meshBasicMaterial color="#000000" />
         </mesh>
 
-        {/* Mouth Extrusion */}
-        <mesh position={[0, 0.1, 0.25]} castShadow>
-          <cylinderGeometry args={[0.18, 0.18, 0.25, 16]} rotation={[0, 0, Math.PI / 2]} />
+        {/* Upper lip / mouth frame - fixed to head */}
+        <mesh position={[0, 0.12, 0.32]} castShadow>
+          <boxGeometry args={[0.32, 0.06, 0.1]} />
           <meshStandardMaterial color={bodyColor} />
         </mesh>
+        {/* Upper teeth */}
+        {[-0.09, -0.03, 0.03, 0.09].map((xOff, i) => (
+          <mesh key={`tooth-upper-${i}`} position={[xOff, 0.08, 0.38]}>
+            <boxGeometry args={[0.04, 0.04, 0.02]} />
+            <meshStandardMaterial color="#e2e8f0" />
+          </mesh>
+        ))}
 
-        {/* Grill Mouth */}
-        <group ref={mouthRef} position={[0, 0.1, 0.36]}>
-          <mesh position={[0, 0, 0]}>
-            <boxGeometry args={[0.3, 0.15, 0.05]} />
+        {/* Jaw group - pivots from top edge (y=0.06) so it swings DOWN */}
+        <group ref={jawRef} position={[0, 0.06, 0.25]}>
+          {/* Jaw plate */}
+          <mesh position={[0, -0.06, 0.07]} castShadow>
+            <boxGeometry args={[0.32, 0.1, 0.1]} />
             <meshStandardMaterial color={bodyColor} />
           </mesh>
-          {/* Grill Lines */}
-          <mesh position={[0, 0.04, 0.03]}>
+          {/* Lower teeth */}
+          {[-0.09, -0.03, 0.03, 0.09].map((xOff, i) => (
+            <mesh key={`tooth-lower-${i}`} position={[xOff, -0.005, 0.13]}>
+              <boxGeometry args={[0.04, 0.03, 0.02]} />
+              <meshStandardMaterial color="#e2e8f0" />
+            </mesh>
+          ))}
+          {/* Jaw grill lines */}
+          <mesh position={[0, -0.04, 0.13]}>
             <boxGeometry args={[0.25, 0.01, 0.01]} />
             <meshStandardMaterial color={blackMetal} />
           </mesh>
-          <mesh position={[0, 0, 0.03]}>
+          <mesh position={[0, -0.08, 0.13]}>
             <boxGeometry args={[0.25, 0.01, 0.01]} />
-            <meshStandardMaterial color={blackMetal} />
-          </mesh>
-          <mesh position={[0, -0.04, 0.03]}>
-            <boxGeometry args={[0.25, 0.01, 0.01]} />
-            <meshStandardMaterial color={blackMetal} />
-          </mesh>
-          <mesh position={[-0.04, 0, 0.03]}>
-            <boxGeometry args={[0.01, 0.1, 0.01]} />
-            <meshStandardMaterial color={blackMetal} />
-          </mesh>
-          <mesh position={[0.04, 0, 0.03]}>
-            <boxGeometry args={[0.01, 0.1, 0.01]} />
             <meshStandardMaterial color={blackMetal} />
           </mesh>
         </group>

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { KeyboardControls, Environment, Sky } from "@react-three/drei";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { KeyboardControls, Stars } from "@react-three/drei";
 import * as THREE from "three";
 
 import { BlockyHumanoid } from "@/components/characters/3d/BlockyHumanoid";
@@ -10,28 +10,79 @@ import { VoxBot } from "@/components/characters/3d/VoxBot";
 import { VoxelPet } from "@/components/characters/3d/VoxelPet";
 
 import { PlayerController } from "@/components/world/PlayerController";
-import { FollowerController } from "@/components/world/FollowerController";
-import { WorldEnvironment } from "@/components/world/Environment";
+import { FuturamaEnvironment } from "@/components/world/FuturamaEnvironment";
 
-function CameraFollow({ targetRef }: { targetRef: React.RefObject<THREE.Group | null> }) {
+function OrbitCamera({ targetRef }: { targetRef: React.RefObject<THREE.Group | null> }) {
+  const { gl } = useThree();
+  const angleRef = useRef(0);
+  const pitchRef = useRef(0.4);
+  const distanceRef = useRef(10);
+  const isDragging = useRef(false);
+  const lastMouse = useRef({ x: 0, y: 0 });
+
+  const onPointerDown = useCallback((e: PointerEvent) => {
+    if (e.button === 0 || e.button === 2) {
+      isDragging.current = true;
+      lastMouse.current = { x: e.clientX, y: e.clientY };
+    }
+  }, []);
+
+  const onPointerMove = useCallback((e: PointerEvent) => {
+    if (!isDragging.current) return;
+    const dx = e.clientX - lastMouse.current.x;
+    const dy = e.clientY - lastMouse.current.y;
+    lastMouse.current = { x: e.clientX, y: e.clientY };
+    angleRef.current -= dx * 0.005;
+    pitchRef.current = THREE.MathUtils.clamp(pitchRef.current - dy * 0.005, 0.1, 1.2);
+  }, []);
+
+  const onPointerUp = useCallback(() => {
+    isDragging.current = false;
+  }, []);
+
+  const onWheel = useCallback((e: WheelEvent) => {
+    distanceRef.current = THREE.MathUtils.clamp(distanceRef.current + e.deltaY * 0.01, 4, 25);
+  }, []);
+
+  const onContextMenu = useCallback((e: Event) => e.preventDefault(), []);
+
+  useEffect(() => {
+    const dom = gl.domElement;
+    dom.addEventListener("pointerdown", onPointerDown);
+    dom.addEventListener("pointermove", onPointerMove);
+    dom.addEventListener("pointerup", onPointerUp);
+    dom.addEventListener("pointerleave", onPointerUp);
+    dom.addEventListener("wheel", onWheel, { passive: true });
+    dom.addEventListener("contextmenu", onContextMenu);
+    return () => {
+      dom.removeEventListener("pointerdown", onPointerDown);
+      dom.removeEventListener("pointermove", onPointerMove);
+      dom.removeEventListener("pointerup", onPointerUp);
+      dom.removeEventListener("pointerleave", onPointerUp);
+      dom.removeEventListener("wheel", onWheel);
+      dom.removeEventListener("contextmenu", onContextMenu);
+    };
+  }, [gl, onPointerDown, onPointerMove, onPointerUp, onWheel, onContextMenu]);
+
   useFrame((state) => {
     if (!targetRef.current) return;
-    
-    // Desired camera position relative to target
-    const targetPos = targetRef.current.position;
-    
-    // We want the camera to look at the player and stay slightly behind and above
-    const cameraOffset = new THREE.Vector3(0, 4, 8);
-    const desiredPos = targetPos.clone().add(cameraOffset);
-    
-    // Smoothly interpolate camera position
+
+    const target = targetRef.current.position;
+    const d = distanceRef.current;
+    const pitch = pitchRef.current;
+    const angle = angleRef.current;
+
+    const desiredPos = new THREE.Vector3(
+      target.x + Math.sin(angle) * Math.cos(pitch) * d,
+      target.y + Math.sin(pitch) * d,
+      target.z + Math.cos(angle) * Math.cos(pitch) * d
+    );
+
     state.camera.position.lerp(desiredPos, 0.1);
-    
-    // Keep camera looking at the target
-    const lookAtPos = targetPos.clone().add(new THREE.Vector3(0, 1, 0)); // Look slightly above feet
-    state.camera.lookAt(lookAtPos);
+    const lookAt = target.clone().add(new THREE.Vector3(0, 1, 0));
+    state.camera.lookAt(lookAt);
   });
-  
+
   return null;
 }
 
@@ -40,28 +91,7 @@ export default function PlaygroundPage() {
   const [status, setStatus] = useState("connected");
   const [activeChar, setActiveChar] = useState("humanoid");
 
-  // References for follow logic
-  const humanoidRef = useRef<THREE.Group>(null);
-  const petRef = useRef<THREE.Group>(null);
-  const botRef = useRef<THREE.Group>(null);
-
-  const getRef = (id: string) => {
-    if (id === "humanoid") return humanoidRef;
-    if (id === "pet") return petRef;
-    return botRef;
-  };
-
-  const getComponent = (id: string) => {
-    if (id === "humanoid") return <BlockyHumanoid isSpeaking={isSpeaking} status={status} />;
-    if (id === "pet") return <VoxelPet isSpeaking={isSpeaking} status={status} />;
-    return <VoxBot isSpeaking={isSpeaking} status={status} />;
-  };
-
-  const order = useMemo(() => {
-    if (activeChar === "humanoid") return ["humanoid", "pet", "bot"];
-    if (activeChar === "pet") return ["pet", "humanoid", "bot"];
-    return ["bot", "humanoid", "pet"];
-  }, [activeChar]);
+  const playerRef = useRef<THREE.Group>(null);
 
   // Keyboard mapping
   const keyboardMap = useMemo(() => [
@@ -74,17 +104,17 @@ export default function PlaygroundPage() {
   return (
     <div className="h-screen w-full relative bg-slate-900 overflow-hidden">
       {/* UI Overlay */}
-      <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur p-4 rounded-2xl shadow-lg border border-slate-200">
-        <h1 className="text-xl font-bold text-slate-900 mb-2">3D Playground</h1>
-        <p className="text-sm text-slate-600 mb-4">Use WASD or Arrows to move.</p>
+      <div className="absolute top-4 left-4 z-10 bg-slate-900/80 backdrop-blur p-4 rounded-2xl shadow-lg border border-cyan-500/30">
+        <h1 className="text-xl font-bold text-cyan-400 mb-2">New New York</h1>
+        <p className="text-sm text-slate-400 mb-4">WASD to move. Drag to look around. Scroll to zoom.</p>
         
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Control:</span>
+            <span className="text-sm font-medium text-slate-300">Control:</span>
             <select 
               value={activeChar}
               onChange={(e) => setActiveChar(e.target.value)}
-              className="bg-slate-100 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5"
+              className="bg-slate-800 border border-cyan-500/30 text-cyan-300 text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block p-1.5"
             >
               <option value="humanoid">Blocky Humanoid</option>
               <option value="pet">Voxel Pet</option>
@@ -92,22 +122,22 @@ export default function PlaygroundPage() {
             </select>
           </div>
 
-          <label className="flex items-center gap-2 text-sm font-medium">
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
             <input 
               type="checkbox" 
               checked={isSpeaking}
               onChange={(e) => setIsSpeaking(e.target.checked)}
-              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+              className="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500"
             />
-            Global Speaking
+            Speaking
           </label>
           
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Status:</span>
+            <span className="text-sm font-medium text-slate-300">Status:</span>
             <select 
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="bg-slate-100 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5"
+              className="bg-slate-800 border border-cyan-500/30 text-cyan-300 text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block p-1.5"
             >
               <option value="connected">Connected</option>
               <option value="error">Error</option>
@@ -116,58 +146,42 @@ export default function PlaygroundPage() {
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-4 z-10 text-white/50 text-sm pointer-events-none">
+      <div className="absolute bottom-4 left-4 z-10 text-cyan-400/50 text-sm pointer-events-none">
         Click characters to interact!
       </div>
 
       {/* 3D Scene */}
       <KeyboardControls map={keyboardMap}>
         <Canvas shadows camera={{ position: [0, 5, 10], fov: 50 }}>
-          <Sky sunPosition={[100, 20, 100]} />
-          <ambientLight intensity={0.4} />
+          <color attach="background" args={["#0c1220"]} />
+          <fog attach="fog" args={["#0c1220", 40, 90]} />
+          <Stars radius={100} depth={60} count={4000} factor={4} fade speed={1} />
+          <ambientLight intensity={0.8} />
           <directionalLight 
             castShadow 
-            position={[10, 20, 10]} 
-            intensity={1.5} 
+            position={[10, 30, 10]} 
+            intensity={1.8}
+            color="#e0d4ff"
             shadow-mapSize={[1024, 1024]}
-            shadow-camera-left={-20}
-            shadow-camera-right={20}
-            shadow-camera-top={20}
-            shadow-camera-bottom={-20}
+            shadow-camera-left={-25}
+            shadow-camera-right={25}
+            shadow-camera-top={25}
+            shadow-camera-bottom={-25}
           />
-          <Environment preset="city" />
+          <hemisphereLight args={["#7c3aed", "#1e293b", 0.6]} />
 
           {/* World */}
-          <WorldEnvironment />
+          <FuturamaEnvironment />
 
-          {/* Characters (Dynamically Ordered) */}
-          {order.map((id, index) => {
-            const isPlayer = index === 0;
-            const targetId = index > 0 ? order[index - 1] : null;
-            
-            if (isPlayer) {
-              return (
-                <PlayerController key={`player-${id}`} objectRef={getRef(id)} position={[0, 0, 0]}>
-                  {getComponent(id)}
-                </PlayerController>
-              );
-            } else {
-              return (
-                <FollowerController 
-                  key={`follower-${id}`} 
-                  objectRef={getRef(id)} 
-                  targetRef={getRef(targetId!)} 
-                  followDistance={id === "bot" ? 2.5 : 2} 
-                  position={index === 1 ? [-2, 0, -2] : [2, 0, -4]}
-                >
-                  {getComponent(id)}
-                </FollowerController>
-              );
-            }
-          })}
+          {/* Active character only */}
+          <PlayerController key={`player-${activeChar}`} objectRef={playerRef} position={[0, 0, 0]}>
+            {activeChar === "humanoid" && <BlockyHumanoid isSpeaking={isSpeaking} status={status} />}
+            {activeChar === "pet" && <VoxelPet isSpeaking={isSpeaking} status={status} />}
+            {activeChar === "bot" && <VoxBot isSpeaking={isSpeaking} status={status} />}
+          </PlayerController>
 
-          {/* Camera Follower */}
-          <CameraFollow targetRef={getRef(activeChar)} />
+          {/* Camera - drag to rotate, scroll to zoom */}
+          <OrbitCamera targetRef={playerRef} />
         </Canvas>
       </KeyboardControls>
     </div>

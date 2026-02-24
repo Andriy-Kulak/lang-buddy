@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { STARTER_CARDS, type LearningCard, type LearningTopic } from "@/lib/cards";
+import { Canvas } from "@react-three/fiber";
+import { Environment, OrbitControls } from "@react-three/drei";
+import { VoxBot } from "@/components/characters/3d/VoxBot";
 
 const STORAGE_KEYS = {
   cards: "lang-buddy.cards.v1",
@@ -584,7 +587,19 @@ export default function Home() {
               </span>
             </div>
 
-            <p className="mt-3 text-sm text-slate-600">
+            <div className="mt-5 h-64 w-full rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden cursor-pointer">
+              <Canvas camera={{ position: [0, 1.5, 5], fov: 45 }}>
+                <ambientLight intensity={0.5} />
+                <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
+                <Environment preset="city" />
+                <group position={[0, -0.5, 0]}>
+                  <VoxBot isSpeaking={isSpeaking} status={status} />
+                </group>
+                <OrbitControls enableZoom={false} autoRotate={false} target={[0, 0.5, 0]} />
+              </Canvas>
+            </div>
+
+            <p className="mt-5 text-sm text-slate-600">
               Start a short conversation and let the tutor ask one question at a time.
               Keep answers short and simple.
             </p>
